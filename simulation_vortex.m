@@ -3,20 +3,21 @@ clc;
 clear all;
 close all;
 
-
 %% System Parameters
 m = 1.59;   % kg
 Jx = 525154.5418 * 10^-6;  % kgm^2
 Jy = 640185.2986 * 10^-6;  % kgm^2
 Jz = 127840.6707 * 10^-6;  % kgm^2
-g = 9.81;           % m/sec^s
-k_M = 0.1347 / g;     % Slope for Motor Torque vs Thrust (from Thrust Torque measurement experiment)
-J_vec= [Jx; Jy; Jz];% Inertia Diagonal Vector
+g = 9.81;                  % m/sec^s
+k_M = 0.1347 / g;       % Slope for Motor Torque vs Thrust (from Thrust Torque measurement experiment)
+J_vec= [Jx; Jy; Jz];    % Inertia Diagonal Vector
 J = [Jx,  0,   0; 
       0, Jy,   0; 
-      0,  0,  Jz];  % Inertia Tensor
-Iw = 673.3897 * 10^-6;          % Inertia for Wing at rotation axis
-sys = [g; m; J_vec; Iw; k_M];
+      0,  0,  Jz];      % Inertia Tensor
+Iw = 673.3897 * 10^-6;  % Inertia for Wing at rotation axis
+R_f = 0;                % Initial Assumed Reaction force
+sys = [g; m; J_vec; Iw; k_M; R_f];
+max_T = 0.7 *g;
 
 %% Lifts and Drags as function of Angle of Attack and Rotation Speed
 
@@ -29,9 +30,6 @@ S     = 0.116/2;      % Wing Area (m^2)
 y_MAC = (b / 6) * ((1 + 2 * tr) / (1 + tr)); % Wing location of MAC
 
 %% Wing Coefficients
-% CL = CL_fun(alpha);
-% CD = CD_fun(alpha);
-% LDR = LDR_fun(alpha);
 w_const = [l; S; y_MAC]; % Wing Constants
 
 %% Initial States
@@ -42,6 +40,7 @@ omega0 = [0; 0; 0];
 alpha0 = deg2rad(90) * ones(3,1); % alpha1 = 89.8 for limited_spin, 90 for hover_yaw_drift
 alpha_dot_0 = [0; 0; 0];
 x0 = [rho0; nu0; Lambda0; omega0; alpha0; alpha_dot_0];
+u_c = zeros(6,1);
 
 %% Desired States
 rhon_d = 0;     % Desired North Position
@@ -50,12 +49,12 @@ h_d = 10;       % Desired Height
 w_d = 0;        % Desired vertical speed
 
 %% Load Dependencies
-load("Vortex_EOM")
+load("Vortex_EOM2")
 
 %% Simulation
 % Time
 t0 = 0;
-tend = 10;
+tend = 20;
 t_inc = 0.01;
 dt = 0.001;
 tspan = 0:t_inc:tend;
@@ -63,20 +62,32 @@ tspan = 0:t_inc:tend;
 % Storage
 thist = [];
 xhist = [];
-Thist = [];
+u_chist = [];
 
 % Gains
 kp_h = 3.5; kd_h = -2; ki_h = 100;
 kp_roll = 0.2; kd_roll = 0.05; ki_roll = 0.345;
 kp_pitch = 0.2; kd_pitch = 0.05; ki_pitch = 0.345;
 kp_yaw = 0.3; kd_yaw = 0.5; ki_yaw = 0.345;
+kp_W = 0.05; % 0.03
+kd_W = 0.010; % 0.0
 
 % Modes
-tricopter = true;
-vortex = ~tricopter;
+% 1. tricopter - regulate thrust, reach constant alpha for no rotation
+% 2. vortex - regulate thrust at constant alpha
+% 0. null forces and moments - effect of loss of thrust and moments
+mode = 1;
 PID = true;
 
 for i = 1:length(tspan)
+
+    %% Changing Modes over time
+    if t0<1.5
+        mode = 1;
+    else
+        mode = 2;
+    end
+
     %% Named States
     rhon = x0(1);
     rhoe = x0(2);
@@ -96,17 +107,31 @@ for i = 1:length(tspan)
     alpha_dot1 = x0(16);
     alpha_dot2 = x0(17);
     alpha_dot3 = x0(18);
+    
+    %% Check Ground Reaction, Changing R_f = sys(end)
+    sys(end) = 0;
+    x0_temp = x0;
+    if ground(h)
+        x0_temp([3,6]) = 0;
+        B_f_R = B_f_R_fun(t0, x0_temp, u_c, sys, w_const);
+        N_f_R = C(3,psi) * C(2,theta) * C(1,phi) * B_f_R;
+        sys(end) = N_f_R(3);
+        if sys(end) >= 0
+            x0([3,6]) = 0; % By conservation of momentum (earth has extreme mass)
+            h =     0; w = 0;
+        end
+    end
 
-    %% Control Inputs
+    %% Desired States
     T_des = @(alpha) 0; %(m * g) / 3 - (S*CL(alpha)*r^2*y_MAC^2)/2; % Desired Thrust per prop for hover
-    if tricopter
-        phi_d = 0; p_d = 0; % roll control
-        theta_d = 0; q_d = 0; % pitch control
+    if mode == 1
+        phi_d = 0; p_d = p; % roll control
+        theta_d = 0; q_d = q; % pitch control
         psi_d = 0; r_d = 0; % yaw control
     end
-    if vortex
-        phi_d = 0; p_d = 0; % roll control
-        theta_d = 0; q_d = 0; % pitch control
+    if mode == 2
+        phi_d = 0; p_d = p; % roll control
+        theta_d = 0; q_d = q; % pitch control
         psi_d = psi; r_d = r; % no yaw control
     end
     
@@ -127,48 +152,48 @@ for i = 1:length(tspan)
     e_yaw_int = e_yaw_prev + e_yaw * t_inc;
 
     %% PID Control with desired path
-    h_pid = 12.5 * (- kp_h * e_h - kd_h * (w - w_d) - ki_h * e_h_int);
+    if mode == 1
+        k_h_mode = 12.5;
+    elseif mode == 2
+        k_h_mode = 4;
+    end
+    h_pid = k_h_mode * (- kp_h * e_h - kd_h * (w - w_d) - ki_h * e_h_int);
     roll_pid = 0.1 * (- kp_roll * e_roll - kd_roll * (p - p_d) - ki_roll * e_roll_int);
     pitch_pid = 0.1 * (- kp_pitch * e_pitch - kd_pitch * (q - q_d) - ki_pitch * e_pitch_int);
     yaw_pid1 = 0.1 * (- kp_yaw * (psi - psi_d) - kd_yaw * (r - r_d) - ki_yaw * e_yaw_int);
-    yaw_pid2 = - 0.05 * (psi - psi_d) - 0.09 * (r - r_d) - 10 * e_yaw_int;
+    yaw_pid2 = - 0.5 * (psi - psi_d) - 0.2 * (r - r_d) - 10 * e_yaw_int;
     
     %% Alpha for yaw control
-    if tricopter
+    if mode == 1
 %         yaw_pid = 0; % no yaw control
-        alpha_c = alpha0 - yaw_pid1;
-        T1 = min(T_des(alpha1) + h_pid - pitch_pid, 0.7*g);
-        T2 = min(T_des(alpha2) + h_pid + pitch_pid - roll_pid, 0.7*g);
-        T3 = min(T_des(alpha3) + h_pid + pitch_pid + roll_pid, 0.7*g);
-%         alpha_c = deg2rad(90.55822) * ones(3,1);
-    end
-    if vortex
-        alpha_c = deg2rad(15) * ones(3,1);
-        T1 = min(T_des(alpha1) + h_pid - pitch_pid * cos(psi), 0.7*g);
-        T2 = min(T_des(alpha2) + h_pid + pitch_pid * cos(psi) - ...
-                roll_pid * cos(psi), 0.7*g);
-        T3 = min(T_des(alpha3) + h_pid + pitch_pid * cos(psi) + ...
-                roll_pid * cos(psi), 0.7*g);
-    end
-
-    if PID
-        kp_W = 0.05; % 0.03
-        kd_W = 0.010; % 0.0
+        alpha_c = alpha0 - yaw_pid1 * ones(3,1); % deg2rad(90.55822)
+        T1 = min(max(T_des(alpha1) + h_pid - pitch_pid, 0), max_T);
+        T2 = min(max(T_des(alpha2) + h_pid + pitch_pid - roll_pid, 0), max_T);
+        T3 = min(max(T_des(alpha3) + h_pid + pitch_pid + roll_pid, 0), max_T);
         W1 = - kp_W * (alpha1 - alpha_c(1)) - kd_W * (alpha_dot1 - 0);
         W2 = - kp_W * (alpha2 - alpha_c(2)) - kd_W * (alpha_dot2 - 0);
         W3 = - kp_W * (alpha3 - alpha_c(3)) - kd_W * (alpha_dot3 - 0);
 %         W1 = -yaw_pid2;
 %         W2 = -yaw_pid2;
 %         W3 = -yaw_pid2;
-        
+    
+    elseif mode == 2
+        alpha_c = deg2rad(45) * ones(3,1);
+        T1 = min(max(T_des(alpha1) + h_pid - pitch_pid * cos(psi), 0), max_T);
+        T2 = min(max(T_des(alpha2) + h_pid + pitch_pid * cos(psi) - ...
+                roll_pid * cos(psi), 0), max_T);
+        T3 = min(max(T_des(alpha3) + h_pid + pitch_pid * cos(psi) + ...
+                roll_pid * cos(psi), 0), max_T);
+        W1 = - kp_W * (alpha1 - alpha_c(1)) - kd_W * (alpha_dot1 - 0);
+        W2 = - kp_W * (alpha2 - alpha_c(2)) - kd_W * (alpha_dot2 - 0);
+        W3 = - kp_W * (alpha3 - alpha_c(3)) - kd_W * (alpha_dot3 - 0);
+%         W1 = -yaw_pid2;
+%         W2 = -yaw_pid2;
+%         W3 = -yaw_pid2;
     else
-        %% Direct Inputs
-        T1 = T_des(alpha1); % Tper = 2 for limited_spin, 1 for hover_yaw_drift
-        T2 = T_des(alpha2) - roll_pid * cos(psi);
-        T3 = T_des(alpha3) + roll_pid * cos(psi);
-        W1 = 0;
-        W2 = 0;
-        W3 = 0;
+        T1 = 0; T2 = 0; T3 = 0;
+        W1 = 0; W2 = 0; W3 = 0;
+    
     end
     
     %% Store previous state errors
@@ -181,6 +206,7 @@ for i = 1:length(tspan)
     T_c = [T1; T2; T3];
     W_c = [W1; W2; W3];
     u_c = [T_c; W_c];
+%     u_c = zeros(6,1);
 
     %% Dynamics/Plant
     [t, x] = ode45(x_dot_fun, t0:dt:t0+t_inc, x0', [], u_c, sys, w_const);
@@ -190,11 +216,11 @@ for i = 1:length(tspan)
     x(:, 13:15) = wrapTo2Pi(x(:, 13:15)); % wrapping alpha between 0 to 2pi
     thist = [thist; t(1:end-1)];
     xhist = [xhist; x(1:end-1, :)];
-    Thist = [Thist, repmat([T1; T2; T3], 1, size(t,1)-1)];
+    u_chist = [u_chist, repmat(u_c, 1, size(t,1)-1)];
     x0 = x(end, :)';
     t0 = t0 + t_inc;
     
-    if h > 20 || h < -20
+    if ground(h) && t0 > 0.5
         disp(tspan(i));
         break;
     end
@@ -222,10 +248,11 @@ for i = 1:18
     ylabel(x_name(i),'Interpreter','latex')
 end
 return
+
 %% Control Plots
 fig2 = figure(2);
 T_leg = ["T1", "T2", "T3"];
-plot(thist,Thist'/g)
+plot(thist,u_chist(1:3,:)'/g)
 % yyaxis("right")
 % hold on
 % plot(thist, xhist(:,[9,13]))
@@ -236,3 +263,11 @@ legend(T_leg)
 VIDEO = false;
 video_title = "hover_drift";
 fig3 = animate_system_seq(xhist, thist, VIDEO, video_title, 0.01);
+
+%% Functions
+function ground = ground(h)
+ground = true;    
+    if h>0
+        ground = false;
+    end
+end

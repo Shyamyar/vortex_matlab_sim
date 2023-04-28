@@ -15,7 +15,7 @@ J = [Jx,  0,   0;
       0, Jy,   0; 
       0,  0,  Jz];      % Inertia Tensor
 Iw = 673.3897 * 10^-6;  % Inertia for Wing at rotation axis
-R_f = m * g;            % Initial Assumed Reaction force
+R_f = 0;                % Initial Assumed Reaction force
 sys = [g; m; J_vec; Iw; k_M; R_f];
 
 %% Lifts and Drags as function of Angle of Attack and Rotation Speed
@@ -74,15 +74,16 @@ kd_W = 0.010; % 0.0
 % Modes
 % 1. tricopter - regulate thrust, reach constant alpha for no rotation
 % 2. vortex - regulate thrust at constant alpha
+% 0. null forces and moments - effect of loss of thrust and moments
 mode = 1;
 PID = true;
 
 for i = 1:length(tspan)
 
     %% Changing Modes over time
-    if t0<2
+    if t0<1
         mode = 1;
-    elseif t0>=5
+    else
         mode = 2;
     end
 
@@ -116,11 +117,11 @@ for i = 1:length(tspan)
         sys(end) = N_f_R(3);
         if sys(end) >= 0
             x0([3,6]) = 0; % By conservation of momentum (earth has extreme mass)
-            h = 0; w = 0;
+            h =     0; w = 0;
         end
     end
 
-    %% Control Inputs
+    %% Desired States
     T_des = @(alpha) 0; %(m * g) / 3 - (S*CL(alpha)*r^2*y_MAC^2)/2; % Desired Thrust per prop for hover
     if mode == 1
         phi_d = 0; p_d = 0; % roll control
@@ -176,10 +177,10 @@ for i = 1:length(tspan)
 %         W3 = -yaw_pid2;
     
     elseif mode == 2
-        alpha_c = deg2rad(55) * ones(3,1);
-        T1 = min(max(T_des(alpha1) + h_pid - pitch_pid * cos(psi), 0), 0.7*g);
+        alpha_c = deg2rad(45) * ones(3,1);
+        T1 = min(max(T_des(alpha1) + h_pid - pitch_pid * cos(psi), 0), max_T);
         T2 = min(max(T_des(alpha2) + h_pid + pitch_pid * cos(psi) - ...
-                roll_pid * cos(psi), 0), 0.7*g);
+                roll_pid * cos(psi), 0), max_T);
         T3 = min(max(T_des(alpha3) + h_pid + pitch_pid * cos(psi) + ...
                 roll_pid * cos(psi), 0), 0.7*g);
         W1 = - kp_W * (alpha1 - alpha_c(1)) - kd_W * (alpha_dot1 - 0);
@@ -188,6 +189,9 @@ for i = 1:length(tspan)
 %         W1 = -yaw_pid2;
 %         W2 = -yaw_pid2;
 %         W3 = -yaw_pid2;
+    else
+        T1 = 0; T2 = 0; T3 = 0;
+        W1 = 0; W2 = 0; W3 = 0;
     
     end
     
