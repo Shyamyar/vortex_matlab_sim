@@ -222,4 +222,4 @@ sys = [g; m; J_vec; Iw; k_M; R_f];
 x_dot_fun = matlabFunction(x_dot, "Vars", {t, x, u_c, sys, w_const})
 B_f_R_fun = matlabFunction(B_f_R, "Vars", {t, x, u_c, sys, w_const})
 B_tau_R_fun = matlabFunction(B_tau_R, "Vars", {t, x, u_c, sys, w_const})
-save("Vortex_EOM2.mat", "x_dot_fun", "B_f_R_fun", "B_tau_R_fun")
+save("Vortex_EOM.mat", "x_dot_fun", "B_f_R_fun", "B_tau_R_fun")
