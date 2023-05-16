@@ -27,7 +27,6 @@ classdef uav_viewer < handle
                 self = self.drawBody(state(1), state(2), state(3),...
                                    state(7), state(8), state(9),...
                                    state(13), state(14), state(15));
-%                 title('Colliding UAVs')
                 xlabel('$\rho_e$ (m)', 'Interpreter', 'latex')
                 ylabel('$\rho_n$ (m)', 'Interpreter', 'latex')
                 zlabel('$h$ (m)', 'Interpreter', 'latex')
@@ -37,24 +36,23 @@ classdef uav_viewer < handle
                 axis('equal')
                 grid on
                 self.plot_initialized = 1;
+                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 10);
             else
                 self.t = time;
-%                 view(-35+5*self.t,36)
                 self=self.drawBody(state(1), state(2), state(3),... 
                                    state(7), state(8), state(9),...
                                    state(13), state(14), state(15));
                 axis([-1 + state(2), 1 + state(2),...
                       -1 + state(1), 1 + state(1),...
                       -1 - state(3), 1 - state(3)]);
-%                 axis('equal')
+                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 10);
             end
         end
         %---------------------------
         function self = drawBody(self, pn, pe, pd, phi, theta, psi, alpha1, alpha2, alpha3)
             beta = pi/2 - [alpha1, alpha2, alpha3];
             [self.Vertices, self.Faces, self.facecolors] = self.define_spacecraft(beta);
-            vertices = C(1,pi)  * self.Vertices;
-            vertices = self.rotate(vertices, phi, theta, psi);   % rotate rigid body  
+            vertices = self.rotate(self.Vertices, phi, theta, psi);   % rotate rigid body  
             vertices = self.translate(vertices, pn, pe, pd);     % translate after rotation
             % transform vertices from NED to ENU (for matlab rendering)
             R = [...
@@ -89,7 +87,6 @@ classdef uav_viewer < handle
                         0, 0, 1];
             R = R_roll*R_pitch*R_yaw;   % inertial to body
             R = R';  % body to inertial
-%               R = C(3,psi) * C(2,theta) * C(1,phi); % body to inertial
             % rotate vertices
             pts = R*pts;
         end
@@ -100,12 +97,12 @@ classdef uav_viewer < handle
         end
         %---------------------------
         function [V, F, colors] = define_spacecraft(self, beta)
-            % Define the vertices (physical location of vertices)
+            % Define the vertices (physical location of vertices in XYZ, inverted)
             V = [...
-                  0.0000     0.0000     0.0685;... % wing1 base top
-                  0.0000     0.0000    -0.0685;... % wing1 base bottom
-                  0.4700     0.0000     0.0515;... % wing1 end top
-                  0.4700     0.0000    -0.0585;... % wing1 end bottom
+                  0.0000     0.0000    -0.0685;... % wing1 base top
+                  0.0000     0.0000     0.0685;... % wing1 base bottom
+                  0.4700     0.0000    -0.0515;... % wing1 end top
+                  0.4700     0.0000     0.0585;... % wing1 end bottom
                   0.0000     0.0000     0.0000;... % wing2 base top
                   0.0000     0.0000     0.1370;... % wing2 base bottom
                  -0.2350     0.4070     0.0170;... % wing2 end top
@@ -114,21 +111,21 @@ classdef uav_viewer < handle
                   0.0000     0.0000     0.1370;... % wing3 base bottom
                  -0.2350    -0.4070     0.0170;... % wing3 end top
                  -0.2350    -0.4070     0.1270;... % wing3 end bottom
-                  0.0750     0.0750     0.0750;... % box front top right
-                  0.0750    -0.0750     0.0750;... % box front top left
-                  0.0750     0.0750    -0.0750;... % box front bottom right
-                  0.0750    -0.0750    -0.0750;... % box front bottom left
-                 -0.0750     0.0750     0.0750;... % box back top right
-                 -0.0750    -0.0750     0.0750;... % box back top left
-                 -0.0750     0.0750    -0.0750;... % box back bottom right
-                 -0.0750    -0.0750    -0.0750;... % box back bottom left
+                  0.0750    -0.0750    -0.0750;... % box front top right
+                  0.0750     0.0750    -0.0750;... % box front top left
+                  0.0750    -0.0750     0.0750;... % box front bottom right
+                  0.0750     0.0750     0.0750;... % box front bottom left
+                 -0.0750    -0.0750    -0.0750;... % box back top right
+                 -0.0750     0.0750    -0.0750;... % box back top left
+                 -0.0750    -0.0750     0.0750;... % box back bottom right
+                 -0.0750     0.0750     0.0750;... % box back bottom left
             ]';
             
             % Add Wing tilt
             V_link = V(:, 1:4);
-            V(:, 1:4) = C(3, deg2rad(0)) * C(1, beta(1)) * V_link;
-            V(:, 5:8) = C(3, deg2rad(-120)) * C(1, beta(2)) * V_link;
-            V(:, 9:12) = C(3, deg2rad(120)) * C(1, beta(3)) * V_link;
+            V(:, 1:4) = C(3, pi) * C(1, beta(1)) * V_link;
+            V(:, 5:8) = C(3, pi/3) * C(1, beta(2)) * V_link;
+            V(:, 9:12) = C(3, -pi/3) * C(1, beta(3)) * V_link;
 
             % define faces as a list of vertices numbered above
             F = [...

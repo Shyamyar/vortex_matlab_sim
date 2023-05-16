@@ -1,6 +1,5 @@
 %% State Variables
-
-syms t m Jx Jy Jz g Iw
+syms t m Jn Je Jd g Iw
 syms rho_n rho_e rho_d u v w phi theta psi p q r 
 syms kp_phi kp_theta kp_psi kd_phi kd_theta kd_psi
 
@@ -26,10 +25,10 @@ syms R_f % Reaction force in vertical direction
 
 %% System Parameters
 
-J_vec= [Jx; Jy; Jz]; 
-J = [Jx,  0,   0; 
-      0, Jy,   0; 
-      0,  0,  Jz]; 
+J_vec= [Jn; Je; Jd]; 
+J = [Jn,  0,   0; 
+      0, Je,   0; 
+      0,  0,  Jd]; 
 C_NB = C(3, psi) * C(2, theta) * C(1, phi); %DCM to convert from body to inertial
 D = D_matrix(phi, theta);
 
@@ -76,10 +75,11 @@ D3 = (1/2) * CD(alpha3) * S * v_MAC^2;
 
 %% Arm Rotations and Body Rotation
 
-% eta(alpha) = pi/2 - alpha; 
-C_B1 = eye(3);              % Arm1 to Body
-C_B2 = C(3,deg2rad(120));   % Arm2 to Body
-C_B3 = C(3,deg2rad(-120));  % Arm3 to Body
+% beta(alpha) = pi/2 - alpha; 
+C_B1 = C(3,pi);              % Arm1 to Body
+C_B1([2,3,4]) = 0;
+C_B2 = C(3,-pi/3);   % Arm2 to Body
+C_B3 = C(3,pi/3);  % Arm3 to Body
 C_1P = C(1,beta(alpha1));   % Prop1 to Arm1
 C_2P = C(1,beta(alpha2));   % Prop2 to Arm2
 C_3P = C(1,beta(alpha3));   % Prop3 to Arm3
@@ -99,7 +99,7 @@ T_c = [T1; T2; T3];
 
 %% Propeller Motor Moments
 
-M(T) = k_M * T; % k_N can be negative if counter-clockwise rotation
+M(T) = k_M * T; % k_M can be negative if counter-clockwise rotation
 M1_1 = M(T1_1);
 M2_2 = -M(T2_2);
 M3_3 = -M(T3_3);
@@ -165,9 +165,9 @@ B_tau_L = cross(y1_B, L1_B)...
 B_tau_D = cross(y1_B, D1_B)...
             + cross(y2_B, D2_B) ...
             + cross(y3_B, D3_B);
-B_tau_N = M1_B + M2_B + M3_B;
-B_tau_M = W1_B + W2_B + W3_B;
-B_tau_R = B_tau_T + B_tau_L + B_tau_D + B_tau_N + B_tau_M;
+B_tau_M = M1_B + M2_B + M3_B;
+B_tau_W = W1_B + W2_B + W3_B;
+B_tau_R = B_tau_T + B_tau_L + B_tau_D + B_tau_M + B_tau_W;
 B_tau_R_symfun = symfun(B_tau_R, [T1, T2, T3, W1, W2, W3, ...
                 alpha1, alpha2, alpha3, l])
 B_tau_R_hover = simplify(B_tau_R_symfun(T, T, T, 0, 0, 0, alpha1, pi/2, pi/2, l))
