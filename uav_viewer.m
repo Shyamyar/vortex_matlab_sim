@@ -36,7 +36,7 @@ classdef uav_viewer < handle
                 axis('equal')
                 grid on
                 self.plot_initialized = 1;
-                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 10);
+                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 24);
             else
                 self.t = time;
                 self=self.drawBody(state(1), state(2), state(3),... 
@@ -45,13 +45,13 @@ classdef uav_viewer < handle
                 axis([-1 + state(2), 1 + state(2),...
                       -1 + state(1), 1 + state(1),...
                       -1 - state(3), 1 - state(3)]);
-                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 10);
+                title(gca, sprintf("Time: %.2f sec", self.t), "FontSize", 24);
             end
         end
         %---------------------------
         function self = drawBody(self, pn, pe, pd, phi, theta, psi, alpha1, alpha2, alpha3)
-            beta = pi/2 - [alpha1, alpha2, alpha3];
-            [self.Vertices, self.Faces, self.facecolors] = self.define_spacecraft(beta);
+            alpha = [alpha1, alpha2, alpha3];
+            [self.Vertices, self.Faces, self.facecolors] = self.define_spacecraft(alpha);
             vertices = self.rotate(self.Vertices, phi, theta, psi);   % rotate rigid body  
             vertices = self.translate(vertices, pn, pe, pd);     % translate after rotation
             % transform vertices from NED to ENU (for matlab rendering)
@@ -96,7 +96,7 @@ classdef uav_viewer < handle
             pts = pts + repmat([pn;pe;pd],1,size(pts,2));
         end
         %---------------------------
-        function [V, F, colors] = define_spacecraft(self, beta)
+        function [V, F, colors] = define_spacecraft(self, alpha)
             % Define the vertices (physical location of vertices in XYZ, inverted)
             V = [...
                   0.0000     0.0000    -0.0685;... % wing1 base top
@@ -123,9 +123,9 @@ classdef uav_viewer < handle
             
             % Add Wing tilt
             V_link = V(:, 1:4);
-            V(:, 1:4) = C(3, pi) * C(1, beta(1)) * V_link;
-            V(:, 5:8) = C(3, pi/3) * C(1, beta(2)) * V_link;
-            V(:, 9:12) = C(3, -pi/3) * C(1, beta(3)) * V_link;
+            V(:, 1:4) = C(3, pi) * C(1, alpha(1)) * V_link;
+            V(:, 5:8) = C(3, -pi/3) * C(1, alpha(2)) * V_link;
+            V(:, 9:12) = C(3, pi/3) * C(1, alpha(3)) * V_link;
 
             % define faces as a list of vertices numbered above
             F = [...
@@ -150,14 +150,14 @@ classdef uav_viewer < handle
 
             colors = [...
                 myred;... % wing1
-                myall;...   % wing2
+                mygreen;...   % wing2
                 myblue;...   % wing3
                 myred;... % front
-                mygreen;...   % right
-                mygreen;...   % back
-                mygreen;... % left
+                myyellow;...   % right
+                myyellow;...   % back
+                myyellow;... % left
                 mycyan;...   % top
-                myyellow;...   % bottom                
+                myall;...   % bottom                
                 ];
         end
     end

@@ -12,7 +12,7 @@ classdef video_writer < handle
     methods
         %------constructor-----------
         function self = video_writer(video_name, output_rate)
-            self.video = VideoWriter(video_name,'Motion JPEG AVI');
+            self.video = VideoWriter(video_name,"MPEG-4");
             self.video.Quality = 70;
             open(self.video)
             self.output_rate = output_rate;
