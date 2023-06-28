@@ -6,12 +6,12 @@ if alpha >= 90
     alpha = 180 - alpha; % makes alpha negative
 end
 
-if alpha <= 18
-    Cm = -0.0002 * alpha^3 + 0.0075 * alpha^2 - 0.088 * alpha + 0.1;
-elseif alpha <= 47
-    Cm = -0.0156 * alpha + 0.0385;
+if alpha < 15
+    Cm =0.0012096563*alpha^2 - 0.0380895546*alpha + 0.0049156276;
+elseif alpha < 32
+    Cm =-0.0006131512*alpha^2 + 0.0165526915*alpha - 0.4062500492;
 elseif alpha <= 90
-    Cm = 9E-05 * alpha^2 - 0.0166 * alpha - 0.0361;
+    Cm =0.000175835*alpha^2 - 0.0286469325*alpha + 0.2451278964;
 end
 
 Cm = Cm * sign_M;

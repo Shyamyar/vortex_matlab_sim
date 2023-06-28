@@ -1,35 +1,27 @@
 %% Clear
 clc;
-clear all;
+clear;
 close all;
 
+%% Drone Body Parameters
+% Wingold_properties;
+% Wing550_properties;
+Wing350_properties;
+
 %% System Parameters
-m = 1.59;   % kg
-Jn = 232225.1780 * 10^-6;  % kgm^2
-Je = 232300.2777 * 10^-6;  % kgm^2
-Jd = 454557.3979 * 10^-6;  % kgm^2
 g = 9.81;                  % m/sec^s
 k_M = 0.1347 / g;       % Slope for Motor Torque vs Thrust (from Thrust Torque measurement experiment)
 J_vec= [Jn; Je; Jd];    % Inertia Diagonal Vector
 J = [Jn,  0,   0; 
       0, Je,   0; 
       0,  0,  Jd];      % Inertia Tensor
-Iw = 645.99 * 10^-6;    % Inertia for Wing at rotation axis
-R_f = m*g;                % Initial Assumed Reaction force
+R_f = m*g;              % Initial Assumed Reaction force
 max_T = 0.7 * g;
-max_W = 2; %0.33
+max_W = 0.6278;         % Hitec HS-7245MH
 max_vel = 2;
-
-%% Lifts and Drags as function of Angle of Attack and Rotation Speed
-
-% Wing Characteristics (From xflr5)
-l     = 0.47;         % Arm Length (m)
-b     = l * 2;        % Wingspan (m)
-AR    = 7.932;        % Aspect ratio
-tr    = 1.37;         % Taper ratio
-S     = (pi*l^2)/3; % 0.116/2;      % Wing Area (m^2)
-y_MAC = (b / 6) * ((1 + 2 * tr) / (1 + tr)); % Wing location of MAC
-MAC   = 0.124;        % Mean Aerodynamic Chord
+tot_mAh = 6000;         % Battery Capacity
+tot_V = 22.2;           % Battery Operating Voltage
+tot_Wh = tot_V * tot_mAh * 1e-3;
 
 %% Wing Coefficients
 w_const = [l; S; y_MAC; MAC]; % Wing Constants
@@ -41,6 +33,9 @@ load("Vortex_EOM")
 r_alpha_hist = [];
 T_alpha_hist = [];
 W_alpha_hist = [];
+u_chist_mode = [];
+tot_flight_time_mode = [];
+cum_Wh_mode = [];
 
 %% Initial States
 rho0 = [0; 0; 0];
@@ -74,6 +69,12 @@ h_d = @(t,h0,hs) hs * cos(w3 * t) + h0;       % Desired Height
 
 %% Simulation
 alphas = 45;
+modes = 1;
+t_inc = 0.01;
+tend = 50;
+tspan = 0:t_inc:tend;
+
+for mode_id = 1:numel(modes)
 
 for alpha_des_id = 1:numel(alphas)
 tic;
@@ -89,10 +90,8 @@ way_point = [rhon_d(0,n0,ns); rhoe_d(0,e0,es); h_d(0,h0,hs)];
 sys = [g; m; J_vec; Iw; k_M; R_f];
 
 %% Time Parameters
-t0 = 0;t_inc = 0.01;
+t0 = 0;
 dt = 0.001;
-tend = 30;
-tspan = 0:t_inc:tend;
 
 %% State Storage Initialization
 thist = [];
@@ -116,12 +115,12 @@ psi_l_prev = 0;
 
 %% Start Mode
 % Modes
-% 1. tricopter - regulate thrust, reach constant alpha for no rotation
-% 2. vortex - regulate thrust at constant alpha
+% 1. tri-copter - regulate thrust, reach constant alpha for no rotation
+% 2. windmill - regulate thrust at constant alpha
 % 3. fixed-wing - rotate at certain pitch angle and increase alpha for lift
 % 0. null or constant forces and moments - effect of loss of thrust and moments
 
-start_mode = 3; % Start mode
+start_mode = modes(mode_id); % Start mode
 mode = start_mode;
 modefixed = false;
 
@@ -159,12 +158,14 @@ for i = 1:length(tspan)
 
     %% Changing Modes over time
     mode_prev = mode;
-    if tspan(i) >= 7
-        mode = 3;
+    if tspan(i) >= 20
+        mode = 2;
+        t_trans = 2; % sec
+        r_trans = r;
     end
     
     if mode ~= mode_prev || i == 1 % Get gains everytime mode changes
-        [kp, kd, ki] = run_gains(m, Jn, Je, Jd, Iw, max_T, max_vel, mode, alpha_des);
+        [kp, kd, ki] = run_gains(m, Jn, Je, Jd, Iw, max_T, max_W, max_vel, mode, alpha_des);
     end
 
     %% Changing Waypoints
@@ -173,8 +174,8 @@ for i = 1:length(tspan)
         % es = 3; 
         % hs = 0.5;
         % n0 = 3;
-        % e0 = 2;
-        % h0 = 7;
+        % e0 = 0;
+        % h0 = 10;
         % way_point = [rhon_d(tspan(i),n0,ns); rhoe_d(tspan(i),e0,es); h_d(tspan(i),h0,hs)];
     end
     
@@ -241,7 +242,7 @@ for i = 1:length(tspan)
         e_n = 0;
         e_e = 0;
         e_h = des_pos_l_(3);
-        theta_d = max(theta - 0.2, deg2rad(-72)); 
+        theta_d = max(theta - 0.2, deg2rad(-65)); 
         q_d = 0; % pitch control
         vel_d = 10;
         u_d = vel_d * cos(theta_d);
@@ -276,12 +277,20 @@ for i = 1:length(tspan)
         T3 = min(max(h_pid + 0.5 * pitch_pid - roll_pid, 0), max_T);
 
         alpha_c =  yaw_pid * ones(3,1) + 0.0097;
+        % if (mode_prev == 2 || t_trans > 0) && r > 0
+        %     t_trans = t_trans - 0.1;
+        %     alpha_c = -(deg2rad(2)/r_trans) * r;
+        % end
         e_alpha = alpha_c - alpha;
         W_c = limit(kp.alpha * (e_alpha) + kd.alpha * (0 - alpha_dot) ...
             + ki.alpha * e_alpha_int, max_W);
 
     elseif mode == 2
         psi_lag = psi + deg2rad(90); 
+        % if tspan(i)>=15
+        %     roll_pid = 0;
+        %     pitch_pid = -7;
+        % end
         T1 = min(max(h_pid - pitch_pid * cos(psi_lag) + ...
                 roll_pid * sin(psi_lag) , 0), max_T);
         T2 = min(max(h_pid - pitch_pid * cos(psi_lag + 2 * pi/3) + ...
@@ -301,8 +310,9 @@ for i = 1:length(tspan)
         T3 = min(max(h_pid + 0.5 * pitch_pid - roll_pid, 0), max_T);
 
         alpha_c =  yaw_pid * ones(3,1) + 0.0097;
-        alpha_c = alpha_c + [0; min(max(alpha(2) - 0.05, deg2rad(-5)),0);...
-            max(min(alpha(3) + 0.05, deg2rad(5)),0)];
+        aoa = deg2rad(5);
+        alpha_c = alpha_c + [0; min(max(alpha(2) - aoa/100, -aoa),0);...
+            max(min(alpha(3) + aoa/100, aoa),0)];
         e_alpha = alpha_c - alpha;
         W_c = limit(kp.alpha * (e_alpha) + kd.alpha * (0 - alpha_dot) ...
             + ki.alpha * e_alpha_int, max_W);
@@ -365,7 +375,42 @@ end
     W_alpha_hist = [W_alpha_hist; mean(u_chist(4:6,end-500:end),'all')];
     
 end
-% return
+
+%% Store control metrics for performance evaluation 
+u_chist_mode = [u_chist_mode; u_chist];
+
+end
+
+%% Performance Evaluation
+for i = 1:numel(modes)
+    u_chist = u_chist_mode(6*i-5:6*i,:);
+    
+    T_all = u_chist(1:3,:)./g;                  % Thrust over time (kgs)
+    I_T = current_T(T_all);                     % Amperes (from experimental trend)
+    avg_V_T = 17.5;                             % Volts
+    % tot_P_T = sum(avg_V_T .* I_T, 1);           % Watts
+    tot_P_T = sum(power_T(T_all), 1);           % Watts (from datasheet trend)
+    
+    tau_all =  u_chist(4:6,:);        % Torque on wings over time (Nm)
+    I_tau = current_tau(abs(tau_all));          % Amperes
+    avg_V_tau = 8;                              % Volts
+    tot_P_tau = sum(avg_V_tau .* I_tau, 1);     % Watts
+    
+    tot_P = tot_P_T + tot_P_tau;                % Watts
+    cum_P = cumsum(tot_P);                      % Watts
+    cum_Wh = cum_P .* (t_inc/3600);             % Wh
+    tot_flight_time = tot_Wh / mean(tot_P) * 60; % Minutes
+    disp(tot_flight_time)
+
+    % if i == 1
+    %     save("var_tri", "t_span", "u_chist", "tot_flight_time", "cum_Wh")
+    % elseif i == 2
+    %     save("var_windmill", "t_span", "u_chist", "tot_flight_time", "cum_Wh")
+    % elseif i == 3
+    %     save("var_fixed", "t_span", "u_chist", "tot_flight_time", "cum_Wh")
+    % end
+end
+return
 
 %% State Plots
 x_name = [...
@@ -397,12 +442,14 @@ for i = 1:18
     ylabel(x_name(i),'Interpreter','latex')
     grid on
 end
-return
 
 %% Control Plots
+set(groot,'defaultLineLineWidth',1)
+set(groot,'defaultaxesFontSize',12)
 fig2 = figure(2);
 T_leg = ["T1", "T2", "T3"];
-plot(tspan(1:length(u_chist)),u_chist(1:3,:)'/g)
+plot(tspan(1:length(u_chist)),u_chist(1:3,:)./g)
+grid on
 xlabel('time (sec)')
 ylabel('kgs')
 title('Thrust over time')
@@ -410,21 +457,81 @@ legend(T_leg)
 
 fig3 = figure(3);
 W_leg = ["W1", "W2", "W3"];
-plot(tspan(1:length(u_chist)),u_chist(4:6,:)')
+plot(tspan(1:length(u_chist)),u_chist(4:6,:))
+grid on
 xlabel('time (sec)')
 ylabel('Nm')
 title('Wing Torque over time')
 legend(W_leg)
 
 fig4 = figure(4);
-pids_leg = ["h_pid", "pitch_pid", "roll_pid"];
-plot(tspan(1:length(u_chist)),pids_hist(2:3,:)')
+plot(tspan(1:length(tot_P)), tot_P)
+grid on
+hold on
 xlabel('time (sec)')
-ylabel('kgs')
-legend(pids_leg(2:3))
+ylabel('Watts')
+xline(8,"LineWidth",2,"Label","Tricopter","LabelVerticalAlignment","bottom")
+xline(20,"LineWidth",2,"Label","Transition","LabelVerticalAlignment","bottom")
+xline(26,"LineWidth",2,"Label","Windmill","LabelVerticalAlignment","bottom")
+xl = [8,8,20,20,26,26,50,50];
+yl = [0,700,700,0,0,700,700,0];
+fill(xl(1:4),yl(1:4),'r','FaceAlpha',0.2)
+fill(xl(3:6),yl(3:6),'b','FaceAlpha',0.2)
+fill(xl(5:8),yl(5:8),'g','FaceAlpha',0.2)
+xlim([8,tend])
+ylim([0,700])
+title('Power draw (Tri-copter to windmill mode transition)')
+
+% fig5 = figure(5);
+% pids_leg = ["h_pid", "pitch_pid", "roll_pid"];
+% plot(tspan(1:length(u_chist)),pids_hist(2:3,:)')
+% xlabel('time (sec)')
+% ylabel('kgs')
+% legend(pids_leg(2:3))
+
+%% Performance Plots
+mode_leg = ["Tri-copter", "Windmill", "Fixed-wing"];
+for i = 1:3
+    if i == 1
+        load("var_tri", "tspan", "u_chist", "tot_flight_time", "cum_Wh")
+    elseif i == 2
+        load("var_windmill", "tspan", "u_chist", "tot_flight_time", "cum_Wh")
+    elseif i == 3
+        load("var_fixed", "tspan", "u_chist", "tot_flight_time", "cum_Wh")
+    end
+
+    fig6 = figure(6);
+    plot(tspan(1:length(u_chist))/60, mean(u_chist(1:3,:)./g))
+    grid on
+    hold on
+    xlabel('time (min)')
+    ylabel('kgs')
+    title('Thrust over time')
+    legend(mode_leg)
+    
+    fig7 = figure(7);
+    plot(tspan(1:length(u_chist))/60, mean(u_chist(4:6,:)))
+    grid on
+    hold on
+    xlabel('time (min)')
+    ylabel('Nm')
+    title('Wing Torque over time')
+    legend(mode_leg)
+    
+    fig8 = figure(8);
+    plot(tspan(1:length(cum_Wh))/60, (cum_Wh/tot_Wh) * 100)
+    grid on
+    hold on
+    xlabel('time (min)')
+    ylabel('%')
+    ylim([0,50])
+    % yline(tot_Wh)
+    title('Percent of Total energy consumed over time')
+    legend(mode_leg)
+end
 
 %% Plot thrust vs AOA
-fig5 = figure(5);
+fig9 = figure(9);
 yyaxis("right")
 plot(alphas,T_alpha_hist/g)
 ylabel('kgs')
@@ -436,12 +543,12 @@ plot(alphas, r_alpha_hist)
 ylabel('rad/s')
 xlabel('Wing Angle (deg)')
 title('Thrust and Ang. Vel. w.r.t AOA')
-legend('Ang. Vel.','Avg Thrust Vortex')
+legend('Ang. Vel.','Avg Thrust Windmill')
 
 %% Animate
 VIDEO = false;
 video_title = "..\Videos\hover_drift";
-fig6 = animate_system_seq(xhist, thist, VIDEO, video_title, t_inc);
+fig10 = animate_system_seq(xhist, thist, VIDEO, video_title, t_inc);
 
 %% Functions
 function ground = ground(h)

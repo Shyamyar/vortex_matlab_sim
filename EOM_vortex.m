@@ -17,7 +17,7 @@ syms CL(alpha) CD(alpha) % Wing coefficient of lift and drag
 syms CLx(alphaeff)
 syms CDx(alphaeff)
 syms Cmx(alphaeff)
-syms alpha_eff1(vec1,vec2,vec3)
+syms alpha_eff(vec1,vec2,vec3)
 syms T1 T2 T3 T % Thrust for each propeller
 syms M(T) k_M % Moments for each propeller rotation proportional to Thrust
 syms W1 W2 W3 W % Moments for each wing rotation
@@ -120,9 +120,9 @@ v3_3 = transpose(C_B3P) * v3_B;
 v1_MAC = norm(v1_1);
 v2_MAC = norm(v2_2);
 v3_MAC = norm(v3_3);
-alpha1_eff = alpha_eff1(v1_1(1), v1_1(2),v1_1(3));
-alpha2_eff = alpha_eff1(v2_2(1), v2_2(2),v2_2(3));
-alpha3_eff = alpha_eff1(v3_3(1), v3_3(2),v3_3(3));
+alpha1_eff = alpha_eff(v1_1(1), v1_1(2),v1_1(3));
+alpha2_eff = alpha_eff(v2_2(1), v2_2(2),v2_2(3));
+alpha3_eff = alpha_eff(v3_3(1), v3_3(2),v3_3(3));
 L1 = (1/2) * CLx(alpha1_eff) * S * v1_MAC^2;
 L2 = (1/2) * CLx(alpha2_eff) * S * v2_MAC^2;
 L3 = (1/2) * CLx(alpha3_eff) * S * v3_MAC^2;

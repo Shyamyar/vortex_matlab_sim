@@ -182,7 +182,7 @@ B_tau_R = B_tau_T + B_tau_L + B_tau_D + B_tau_M + B_tau_m + B_tau_W;
 % B_tau_R = B_tau_T + B_tau_L + B_tau_D + B_tau_M + B_tau_W; % Not considering pitching moments
 
 %% Torque on the Wings Pitch Moment, and Servo Torque
-W_m = W_c + m_c; 
+W_m = W_c - m_c; 
 % W_m = W_c; 
 
 %% Equations of Motion

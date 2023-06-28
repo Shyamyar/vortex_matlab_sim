@@ -1,8 +1,5 @@
 function CL = CLx(alpha)
 
-CL_alpha_0 = 0.0; % From xflr5
-CL_alpha = 0.0879; % From xflr5
-
 sign_L = sign(alpha);
 
 alpha = rad2deg(abs(alpha)); % change to deg from rad
@@ -11,14 +8,12 @@ if alpha > 90
     sign_L = -sign_L;
 end
 
-if alpha <= 10
-    CL = CL_alpha * alpha + CL_alpha_0;
-elseif alpha <= 17
-    CL = -0.0233 * alpha + 1.0186;
-elseif alpha <= 56
-    CL = -0.0008 * alpha^2 + 0.0714 * alpha - 0.438;
+if alpha < 15
+    CL =-0.0025198237*alpha^2 + 0.1091744252*alpha - 0.0081683948;
+elseif alpha < 32
+    CL =0.0022324018*alpha^2 - 0.0965137835*alpha + 1.9029451107;
 elseif alpha <= 90
-    CL = -0.0258 * alpha + 2.4887;
+    CL =-0.0007354709*alpha^2 + 0.0733573917*alpha - 0.5493489893;
 end
 
 CL = sign_L * CL;

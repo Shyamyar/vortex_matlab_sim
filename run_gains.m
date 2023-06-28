@@ -1,4 +1,4 @@
-function [kp, kd, ki] = run_gains(m, Jn, Je, Jd, Iw, max_T, vel_max, mode, alpha_des)
+function [kp, kd, ki] = run_gains(m, Jn, Je, Jd, Iw, max_T, max_W, vel_max, mode, alpha_des)
 
 if mode == 1
 
@@ -58,19 +58,22 @@ if mode == 1
     zeta_alpha = 0.707;
     a_alpha3 = 1/Iw;
     alpha_max = deg2rad(30);
-    tau_alpha_max = 2;
+    tau_alpha_max = max_W;
     wn_alpha = sqrt(a_alpha3*tau_alpha_max*sqrt(1-zeta_alpha^2)/alpha_max);
     
     kp.alpha = wn_alpha^2/a_alpha3;
     kd.alpha = 1.1*(2*zeta_alpha*wn_alpha)/a_alpha3;
     ki.alpha = 0;
-    
+    % kp.alpha = 2.7;
+    % kd.alpha = 0.03;
+    % ki.alpha = 0;
+   
 elseif mode == 2 || mode == 0
     
     % Vertical Speed gains
     zeta_w = 0.707;
     a_w3 = 1/m;
-    w_max = 2 + ((2-4)/(45-75)) * (alpha_des-45);
+    w_max = 2 + ((4-2)/(75-45)) * (alpha_des-45);
     wn_w = sqrt(a_w3*max_T*sqrt(1-zeta_w^2)/w_max);
     
     kp.w = wn_w^2/a_w3;
@@ -80,7 +83,7 @@ elseif mode == 2 || mode == 0
     % Height gains
     zeta_h = 0.707;
     a_h3 = 1/m;
-    h_max = 0.8 + ((0.8-1)/(45-75)) * (alpha_des-45);
+    h_max = 0.8 + ((1-0.8)/(75-45)) * (alpha_des-45);
     wn_h = sqrt(a_h3*w_max*sqrt(1-zeta_h^2)/h_max);
     
     kp.h = wn_h^2/a_h3;
@@ -124,7 +127,7 @@ elseif mode == 2 || mode == 0
     zeta_alpha = 0.707;
     a_alpha3 = 1/Iw;
     alpha_max = deg2rad(30);
-    tau_alpha_max = 2;
+    tau_alpha_max = max_W;
     wn_alpha = sqrt(a_alpha3*tau_alpha_max*sqrt(1-zeta_alpha^2)/alpha_max);
     
     kp.alpha = wn_alpha^2/a_alpha3;
